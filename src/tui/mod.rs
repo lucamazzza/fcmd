@@ -1,8 +1,10 @@
-use core::time;
+use core::{fmt, time};
+use std::{char, fmt::format};
+
+use crate::util;
 
 type Color = i32;
 type Attr = i32;
-type EventType = isize;
 type FillReturn = isize;
 type BorderCharacter = char;
 
@@ -23,39 +25,41 @@ pub enum BorderShape {
     BorderRight,
 }
 
-pub enum Keystrokes {
-    Ctrl_A,
-    Ctrl_B,
-    Ctrl_C,
-    Ctrl_D,
-    Ctrl_E,
-    Ctrl_F,
-    Ctrl_H,
+pub enum EventType {
+    Rune,
+    CtrlA,
+    CtrlB,
+    CtrlC,
+    CtrlD,
+    CtrlE,
+    CtrlF,
+    CtrlH,
     Tab,
-    Ctrl_J,
-    Ctrl_K,
-    Ctrl_L,
-    Ctrl_M,
-    Ctrl_N,
-    Ctrl_O,
-    Ctrl_P,
-    Ctrl_Q,
-    Ctrl_R,
-    Ctrl_S,
-    Ctrl_T,
-    Ctrl_U,
-    Ctrl_V,
-    Ctrl_W,
-    Ctrl_X,
-    Ctrl_Y,
-    Ctrl_Z,
+    CtrlJ,
+    CtrlK,
+    CtrlL,
+    CtrlM,
+    CtrlN,
+    CtrlO,
+    CtrlP,
+    CtrlQ,
+    CtrlR,
+    CtrlS,
+    CtrlT,
+    CtrlU,
+    CtrlV,
+    CtrlW,
+    CtrlX,
+    CtrlY,
+    CtrlZ,
     Esc,
-    Ctrl_Space,
-    Ctrl_Del,
-    Ctrl_Backslash,
-    Ctrl_Caret,
-    Ctrl_Slash,
-    Shift_Tab,
+    CtrlSpace,
+    CtrlDel,
+    CtrlBackslash,
+    CtrlCaret,
+    CtrlSlash,
+    CtrlRightbracket,
+    ShiftTab,
     Backspace,
     Del,
     PageUp,
@@ -67,11 +71,11 @@ pub enum Keystrokes {
     Home,
     End,
     Ins,
-    Shift_Up,
-    Shift_Down,
-    Shift_Left,
-    Shift_Right,
-    Shift_Delete,
+    ShiftUp,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    ShiftDelete,
     F1,
     F2,
     F3,
@@ -84,17 +88,17 @@ pub enum Keystrokes {
     F10,
     F11,
     F12,
-    Alt_Backspace,
-    Alt_Up,
-    Alt_Down,
-    Alt_Left,
-    Alt_Right,
-    Alt_Shift_Up,
-    Alt_Shift_Down,
-    Alt_Shift_Left,
-    Alt_shift_Right,
+    AltBackspace,
+    AltUp,
+    AltDown,
+    AltLeft,
+    AltRight,
+    AltShiftUp,
+    AltShiftDown,
+    AltShiftLeft,
+    AltShiftRight,
     Alt,
-    Ctrl_Alt,
+    CtrlAlt,
     Invalid,
     Fatal,
     Mouse,
@@ -103,10 +107,10 @@ pub enum Keystrokes {
     RightClick,
     ScrollUp,
     ScrollDown,
-    Shift_LeftClick,
-    Shift_RightClick,
-    Shift_ScrollUp,
-    Shift_ScrollDown,
+    ShiftLeftClick,
+    ShiftRightClick,
+    ShiftScrollUp,
+    ShiftScrollDown,
 }
 
 pub enum Events {
@@ -168,8 +172,8 @@ pub struct ColorTheme {
 
 pub struct Event {
     typ:         EventType,
-    rune:        char,
-    mouse_event: *mut MouseEvent,
+    character:   char,
+    mouse_event: Option<MouseEvent>,
 }
 
 pub struct MouseEvent {
@@ -212,7 +216,7 @@ pub struct FullscreenRenderer {
 fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
     if !utf {
         return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '-',
             bottom:       '-',
             left:         '|',
@@ -225,7 +229,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
     }
     match shape {
         BorderShape::BorderSharp => return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '─',
             bottom:       '─',
             left:         '│',
@@ -236,7 +240,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_right: '┘',  
         },
         BorderShape::BorderBold => return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '━',
             bottom:       '━',
             left:         '┃',
@@ -247,7 +251,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_right: '┛',  
         },
         BorderShape::BorderBlock => return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '▀',
             bottom:       '▄',
             left:         '▌',
@@ -258,7 +262,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_right: '▟',  
         },
         BorderShape::BorderThinBlock => return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '▔',
             bottom:       '▁',
             left:         '▏',
@@ -269,7 +273,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_right: '🭿',  
         },
         BorderShape::BorderDouble => return BorderStyle {
-            shape:        shape,
+            shape,              
             top:          '═',
             bottom:       '═',
             left:         '║',
@@ -279,9 +283,8 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_left:  '╚',
             bottom_right: '╝',  
         },
- 
         _ => return BorderStyle {
-            shape:        shape,
+            shape,
             top:          '─',
             bottom:       '─',
             left:         '│',
@@ -291,6 +294,38 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
             bottom_left:  '╰',
             bottom_right: '╯',  
         },
-
     }
-} 
+}
+
+fn as_event(t: EventType) -> Event {
+    Event {
+        typ: t,
+        character: char::from_u32(0).expect("NaN"),
+        mouse_event: None,
+    }
+}
+
+fn as_string(t: EventType) -> String {
+    t.into()
+}
+
+fn comparable(e: Event) -> Event {
+    Event {
+        typ: e.typ,
+        character: e.character,
+        mouse_event: None,
+    }
+}
+
+fn keyname(e: Event) -> String {
+    match e.typ {
+        EventType::Rune             => return format!("{}", e.character),
+        EventType::Alt              => return format!("alt-{}", e.character),
+        EventType::CtrlAlt          => return format!("ctrl-alt-{}", e.character),
+        EventType::CtrlBackslash    => return format!("ctrl-\\"),
+        EventType::CtrlRightbracket => return format!("ctrl-]"),
+        EventType::CtrlCaret        => return format!("ctrl-^"),
+        EventType::CtrlSlash        => return format!("ctrl-/"),
+        _ => util::to_kebab_case(e.typ.into()),
+    }
+}
