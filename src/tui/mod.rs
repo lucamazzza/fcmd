@@ -1,7 +1,53 @@
 use core::{fmt, time};
-use std::{char, fmt::format};
+use std::{char, fmt::{format, Formatter}};
 
 use crate::util;
+
+pub trait Renderer {
+    fn new(&self) -> Self;
+    fn resize(&self, max_height: fn(i32) -> i32);
+    fn pause(&self, clear: bool);
+    fn resume(&self, clear: bool, sigcont: bool);
+    fn clear(&self);
+    // TODO: Why dyn does not work??? WTF???
+    fn refresh_windows(&self, windows: Vec<dyn Window>);
+    fn refresh(&self);
+    fn close(&self);
+    fn pass_through(&self, s: String);
+    fn needs_scrollbar_redraw(&self) -> bool;
+    fn should_emit_resize_event(&self) -> bool;
+    fn get_char(&self) -> Event;
+    fn top(&self) -> i32;
+    fn max_x(&self) -> i32;
+    fn max_y(&self) -> i32;
+    fn size(&self) -> TermSize;
+}
+
+pub trait Window {
+    fn new(&self, top: i32, left: i32, width: i32, height: i32, preview: bool, border_style: BorderStyle) -> Self;
+    fn top(&self) -> i32;
+    fn left(&self) -> i32;
+    fn width(&self) -> i32;
+    fn height(&self) -> i32;
+    fn draw_border(&self);
+    fn draw_h_border(&self);
+    fn refresh(&self);
+    fn finish_fill(&self);
+    fn close(&self);
+    fn x(&self) -> i32;
+    fn y(&self) -> i32;
+    fn enclose(&self, y: i32, x: i32) -> bool;
+    fn mov(&self, y: i32, x: i32);
+    fn mov_and_clear(&self, y: i32, x: i32);
+    fn print(&self, text: String);
+    fn cprint(&self, color: ColorPair, text: String);
+    fn fill(&self, text: String) -> FillReturn;
+    fn cfill(&self, fg: Color, bg: Color, attr: Attr, text: String) -> FillReturn;
+    fn link_begin(&self, uri: String, params: String);
+    fn link_end(&self);
+    fn erase(&self);
+    fn erase_maybe(&self);
+}
 
 type Color = i32;
 type Attr = i32;
@@ -25,6 +71,7 @@ pub enum BorderShape {
     BorderRight,
 }
 
+#[derive(Debug)]
 pub enum EventType {
     Rune,
     CtrlA,
@@ -213,7 +260,13 @@ pub struct FullscreenRenderer {
     clicks:      [[isize;2]],
 }
 
-fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
+impl fmt::Display for EventType {
+    pub fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+pub fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
     if !utf {
         return BorderStyle {
             shape,
@@ -297,7 +350,7 @@ fn make_border_style(shape: BorderShape, utf: bool) -> BorderStyle {
     }
 }
 
-fn as_event(t: EventType) -> Event {
+pub fn as_event(t: EventType) -> Event {
     Event {
         typ: t,
         character: char::from_u32(0).expect("NaN"),
@@ -305,11 +358,7 @@ fn as_event(t: EventType) -> Event {
     }
 }
 
-fn as_string(t: EventType) -> String {
-    t.into()
-}
-
-fn comparable(e: Event) -> Event {
+pub fn comparable(e: Event) -> Event {
     Event {
         typ: e.typ,
         character: e.character,
@@ -317,7 +366,7 @@ fn comparable(e: Event) -> Event {
     }
 }
 
-fn keyname(e: Event) -> String {
+pub fn keyname(e: Event) -> String {
     match e.typ {
         EventType::Rune             => return format!("{}", e.character),
         EventType::Alt              => return format!("alt-{}", e.character),
@@ -326,6 +375,7 @@ fn keyname(e: Event) -> String {
         EventType::CtrlRightbracket => return format!("ctrl-]"),
         EventType::CtrlCaret        => return format!("ctrl-^"),
         EventType::CtrlSlash        => return format!("ctrl-/"),
-        _ => util::to_kebab_case(e.typ.into()),
+        _ => util::to_kebab_case(e.typ.to_string().to_lowercase()),
     }
 }
+
